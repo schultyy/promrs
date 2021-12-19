@@ -1,7 +1,8 @@
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
+use command::Command;
 use log::{debug, error, info};
-use tokio::{sync::{broadcast::{self, Receiver, Sender, error}}, task};
+use tokio::{sync::{broadcast::{self, Receiver, Sender}}, task};
 use warp::{Filter, Rejection, Reply, reject, reply};
 use storage::Storage;
 
@@ -9,6 +10,7 @@ mod metrics;
 mod storage;
 mod storage_error;
 mod web_error;
+mod command;
 
 type WebResult<T> = std::result::Result<T, Rejection>;
 
@@ -25,29 +27,6 @@ async fn fetch_metrics() -> Result<Vec<String>, Box<dyn std::error::Error>> {
         .map(|s| s.to_string())
         .collect::<Vec<_>>();
     Ok(metrics)
-}
-
-#[derive(Debug, Clone)]
-enum Command {
-    Store(String),
-    Query(String),
-    QueryResults(Vec<(i64, f64)>)
-}
-
-impl Display for Command {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Command::Store(metric) => {
-                write!(f, "STORE {}", metric)
-            },
-            Command::Query(query) => {
-                write!(f, "QUERY {}", query)
-            },
-            Command::QueryResults(metrics) => {
-                write!(f, "QUERY RESULTS {:?}", metrics)
-            },
-        }
-    }
 }
 
 #[tokio::main]
