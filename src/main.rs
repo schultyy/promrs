@@ -1,6 +1,11 @@
-use log::{error, info};
+use std::collections::HashMap;
+
+use log::{debug, error, info};
 use tokio::{sync::mpsc, task};
-use warp::Filter;
+use warp::{
+    http::{Response, StatusCode},
+    Filter,
+};
 
 use storage::Storage;
 
@@ -58,8 +63,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let forever_http_interface = task::spawn(async move {
-        let hello = warp::path!("hello" / String)
-        .map(|name| format!("Hello, {}!", name));
+        let hello = warp::path!("query")
+        .and(warp::query::<HashMap<String, String>>())
+        .map(|p: HashMap<String, String>| {
+            info!("handling query request");
+            match p.get("key") {
+                Some(key) => {
+                    Response::builder().body(format!("key = {}", key))
+                },
+                None => Response::builder().body(String::from("No \"key\" param in query.")),
+            }
+        });
+
+        info!("Listening at http://localhost:3030/query");
 
         warp::serve(hello)
             .run(([127, 0, 0, 1], 3030))
@@ -87,7 +103,7 @@ fn store_data(storage: &mut Storage, cmd: String) {
             info!("Stored {}", cmd);
         }
         Err(err) => {
-            error!("{}", err.to_string());
+            debug!("{}", err.to_string());
         }
     }
 }
