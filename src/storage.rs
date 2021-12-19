@@ -27,4 +27,13 @@ impl Storage {
             Err(StorageError::new("Could not parse Metric".to_string(), metric_str))
         }
     }
+
+    pub(crate) fn query(&self, query: String) -> Vec<(i64, f64)> {
+        if let Some((_, time_series)) = self.metrics.get_key_value(&query) {
+            time_series.to_owned()
+        }
+        else {
+            vec!()
+        }
+    }
 }
