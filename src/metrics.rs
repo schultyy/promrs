@@ -1,7 +1,10 @@
-#[derive(Debug)]
+use chrono::prelude::*;
+
+#[derive(Debug, Clone)]
 pub struct Metric {
     pub name: String,
     pub value: f64,
+    pub timestamp: i64
 }
 
 impl Metric {
@@ -23,9 +26,12 @@ impl Metric {
             return None;
         }
 
+        let utc: DateTime<Utc> = Utc::now();
+
         Some(Metric {
             name: metric_name.unwrap().to_string(),
             value: parsed_metric_value.unwrap(),
+            timestamp: utc.timestamp()
         })
     }
 }
