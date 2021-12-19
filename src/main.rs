@@ -3,6 +3,7 @@ use tokio::{sync::mpsc, task};
 
 mod metrics;
 mod storage;
+mod storage_error;
 
 fn scrape_endpoint() -> &'static str {
     "http://localhost:9100/metrics"

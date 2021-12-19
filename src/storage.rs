@@ -1,56 +1,26 @@
-use std::{error::Error, fmt::Display};
+use std::collections::HashMap;
 
-use crate::metrics::Metric;
-
-#[derive(Debug)]
-pub struct StorageError {
-    pub message: String,
-    pub metric: String,
-}
-
-impl StorageError {
-    pub fn new(message: String, metric: String) -> Self {
-        Self {
-            message: message,
-            metric: metric
-        }
-    }
-}
-
-impl Display for StorageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl Error for StorageError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-
-    fn description(&self) -> &str {
-        &self.message
-    }
-
-    fn cause(&self) -> Option<&dyn Error> {
-        self.source()
-    }
-}
+use crate::{metrics::Metric, storage_error::StorageError};
 
 pub struct Storage {
-    metrics: Vec<Metric>
+    metrics: HashMap<String, Vec<(i64, f64)>>
 }
 
 impl Storage {
     pub fn new() -> Self {
         Self {
-            metrics: vec!()
+            metrics: HashMap::default()
         }
     }
 
     pub fn store(&mut self, metric_str: String) -> Result<(), StorageError> {
         if let Some(metric) = Metric::from_str(&metric_str) {
-            self.metrics.push(metric);
+            if self.metrics.contains_key(&metric.name) {
+                let time_series = self.metrics.get_mut(&metric.name).unwrap();
+                time_series.push(metric.into());
+            } else {
+                self.metrics.insert(metric.name.to_string(), vec![metric.into()]);
+            }
             Ok(())
         }
         else {

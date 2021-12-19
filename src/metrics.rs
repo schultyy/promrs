@@ -35,3 +35,9 @@ impl Metric {
         })
     }
 }
+
+impl Into<(i64, f64)> for Metric {
+    fn into(self) -> (i64, f64) {
+        (self.timestamp, self.value)
+    }
+}
