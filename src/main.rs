@@ -56,11 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Fetching Metrics");
             tokio::spawn(async move {
                 let results = fetch_metrics().await.unwrap();
-                for result in results {
-                    info!("Sending Metric \"{}\"", result);
-                    if let Err(err) = tx.send(Command::Store(result)) {
-                        eprintln!("Encountered Error {:?}", err);
-                    }
+                if let Err(err) = tx.send(Command::Store(results)) {
+                    eprintln!("Encountered Error {:?}", err);
                 }
             });
         }
@@ -147,13 +144,16 @@ fn fetch_data(storage: &mut Storage, query: String, tx: Sender<Command>) {
     }
 }
 
-fn store_data(storage: &mut Storage, cmd: String) {
-    match storage.store(cmd.to_string()) {
-        Ok(()) => {
-            info!("Stored {}", cmd);
-        }
-        Err(err) => {
-            debug!("{}", err.to_string());
+fn store_data(storage: &mut Storage, commands: Vec<String>) {
+    info!("Storing batch of {} new commands", commands.len());
+    for cmd in commands {
+        match storage.store(cmd.to_string()) {
+            Ok(()) => {
+                info!("Stored {}", cmd);
+            }
+            Err(err) => {
+                debug!("{}", err.to_string());
+            }
         }
     }
 }
