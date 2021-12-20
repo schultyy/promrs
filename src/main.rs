@@ -5,6 +5,10 @@ use tracing::{debug, error, info, instrument, span, Level};
 use tokio::{sync::{broadcast::{self, Receiver, Sender}}, task};
 use warp::{Filter, Rejection, Reply, reject, reply};
 use storage::Storage;
+use opentelemetry::sdk::trace::Tracer;
+use opentelemetry::trace::TraceError;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::prelude::*;
 
 mod metrics;
 mod storage;
@@ -30,9 +34,21 @@ async fn fetch_metrics() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(metrics)
 }
 
+fn init_tracer() -> Result<Tracer, TraceError> {
+    opentelemetry_jaeger::new_pipeline()
+        .with_service_name("jaeger_example")
+        .install_simple()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+
+    let tracer = init_tracer().expect("Failed to initialize tracer");
+    tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::new("INFO"))
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .try_init()
+            .expect("Failed to register tracer with registry");
 
     let vals: (Sender<Command>, Receiver<Command>) = broadcast::channel(500);
     let tx = vals.0;
@@ -94,6 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     forever_fetch_metrics.await.unwrap();
     forever_http_interface.await.unwrap();
 
+    opentelemetry::global::shutdown_tracer_provider();
     Ok(())
 }
 
