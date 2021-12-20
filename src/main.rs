@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use command::Command;
-use log::{debug, error, info};
+use tracing::{debug, error, info, instrument, span, Level};
 use tokio::{sync::{broadcast::{self, Receiver, Sender}}, task};
 use warp::{Filter, Rejection, Reply, reject, reply};
 use storage::Storage;
@@ -18,6 +18,7 @@ fn scrape_endpoint() -> &'static str {
     "http://localhost:9100/metrics"
 }
 
+#[instrument]
 async fn fetch_metrics() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let metric_payload = reqwest::get(scrape_endpoint())
         .await?
@@ -31,7 +32,8 @@ async fn fetch_metrics() -> Result<Vec<String>, Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
+
     let vals: (Sender<Command>, Receiver<Command>) = broadcast::channel(500);
     let tx = vals.0;
     let mut rx1 = vals.1;
@@ -42,7 +44,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut storage = Storage::new();
         debug!("Spawn resource manager task");
         while let Ok(cmd) = rx1.recv().await {
-            info!("Received Command {:?}", cmd);
+            let span = span!(Level::TRACE ,"received_command");
+            let _enter = span.enter();
+            info!(command=cmd.to_string().as_str(), "Received Command");
             process_command(cmd, &mut storage, backchannel.clone());
         }
     });
@@ -55,9 +59,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let tx = tx.clone();
             info!("Fetching Metrics");
             tokio::spawn(async move {
+                let span = span!(Level::TRACE, "forever_fetch_metrics");
+                let _enter = span.enter();
+
                 let results = fetch_metrics().await.unwrap();
                 for result in results {
-                    info!("Sending Metric \"{}\"", result);
+                    info!(metric=result.as_str(), "Sending Metric");
                     if let Err(err) = tx.send(Command::Store(result)) {
                         eprintln!("Encountered Error {:?}", err);
                     }
@@ -90,6 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[instrument]
 async fn get_query(p: HashMap<String, String>, tx: Arc<Sender<Command>>) -> WebResult<impl Reply> {
     info!("handling query request");
     match p.get("key") {
@@ -113,6 +121,7 @@ async fn get_query(p: HashMap<String, String>, tx: Arc<Sender<Command>>) -> WebR
     }
 }
 
+#[instrument]
 fn format_reply(metrics: Command) -> WebResult<impl Reply> {
     match metrics {
         Command::QueryResults(metrics) => {
@@ -126,6 +135,7 @@ fn format_reply(metrics: Command) -> WebResult<impl Reply> {
     }
 }
 
+#[instrument(skip(storage, tx))]
 fn process_command(cmd: Command, storage: &mut Storage, tx: Sender<Command>) {
     match cmd {
         Command::Store(cmd) => {
@@ -140,6 +150,7 @@ fn process_command(cmd: Command, storage: &mut Storage, tx: Sender<Command>) {
     }
 }
 
+#[instrument]
 fn fetch_data(storage: &mut Storage, query: String, tx: Sender<Command>) {
     let metrics = storage.query(query);
     if let Err(err) = tx.send(Command::QueryResults(metrics)) {
@@ -147,6 +158,7 @@ fn fetch_data(storage: &mut Storage, query: String, tx: Sender<Command>) {
     }
 }
 
+#[instrument(skip(storage))]
 fn store_data(storage: &mut Storage, cmd: String) {
     match storage.store(cmd.to_string()) {
         Ok(()) => {

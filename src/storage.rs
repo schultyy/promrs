@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{metrics::Metric, storage_error::StorageError};
 
+#[derive(Debug)]
 pub struct Storage {
     metrics: HashMap<String, Vec<(i64, f64)>>
 }
