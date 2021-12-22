@@ -36,7 +36,7 @@ async fn fetch_metrics() -> Result<Vec<String>, Box<dyn std::error::Error>> {
 
 fn init_tracer() -> Result<Tracer, TraceError> {
     opentelemetry_jaeger::new_pipeline()
-        .with_service_name("jaeger_example")
+        .with_service_name("promrs")
         .install_simple()
 }
 
