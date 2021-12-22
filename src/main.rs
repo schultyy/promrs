@@ -76,13 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::spawn(async move {
                 let span = span!(Level::TRACE, "forever_scrape_metrics");
                 let _enter = span.enter();
-
                 let results = scrape_metrics().await.unwrap();
-                for result in results {
-                    info!(metric=result.as_str(), "Sending Metric");
-                    if let Err(err) = tx.send(Command::Store(result)) {
-                        error!("Encountered Error {:?}", err);
-                    }
+                if let Err(err) = tx.send(Command::Store(results)) {
+                    eprintln!("Encountered Error {:?}", err);
                 }
             });
         }
@@ -190,14 +186,17 @@ fn fetch_data(storage: &mut Storage, query: String, tx: Sender<Command>) {
     }
 }
 
-#[instrument(skip(storage))]
-fn store_data(storage: &mut Storage, cmd: String) {
-    match storage.store(cmd.to_string()) {
-        Ok(()) => {
-            info!("Stored {}", cmd);
-        }
-        Err(err) => {
-            debug!("{}", err.to_string());
+#[instrument(skip(storage, commands))]
+fn store_data(storage: &mut Storage, commands: Vec<String>) {
+    info!("Storing batch of {} new commands", commands.len());
+    for cmd in commands {
+        match storage.store(cmd.to_string()) {
+            Ok(()) => {
+                info!("Stored {}", cmd);
+            }
+            Err(err) => {
+                debug!("{}", err.to_string());
+            }
         }
     }
 }
