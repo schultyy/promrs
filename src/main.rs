@@ -62,6 +62,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut storage = Storage::new();
         debug!("Spawn resource manager task");
         while let Ok(cmd) = rx1.recv().await {
+            let span = span!(Level::TRACE, "manager_received_command");
+            let _enter = span.enter();
+            info!("received command {}", cmd.to_string());
             process_received_manager_command(cmd, &mut storage, &backchannel);
         }
     });
@@ -109,9 +112,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[instrument]
 fn process_received_manager_command(cmd: Command, storage: &mut Storage, backchannel: &Sender<Command>) {
-    let span = span!(Level::TRACE ,"received_command");
+    let span = span!(Level::TRACE ,"process_received_manager_command", cmd=cmd.to_string().as_str());
     let _enter = span.enter();
     info!(command=cmd.to_string().as_str(), "Received Command");
     process_command(cmd, storage, backchannel.clone());
@@ -160,7 +162,6 @@ fn format_reply(metrics: Command) -> WebResult<impl Reply> {
     }
 }
 
-#[instrument(skip(storage, tx))]
 fn process_command(cmd: Command, storage: &mut Storage, tx: Sender<Command>) {
     let span = span!(Level::TRACE, "process_command", cmd=cmd.to_string().as_str());
     let _enter = span.enter();
@@ -186,13 +187,15 @@ fn fetch_data(storage: &mut Storage, query: String, tx: Sender<Command>) {
     }
 }
 
-#[instrument(skip(storage, commands))]
+#[instrument(skip(storage,commands))]
 fn store_data(storage: &mut Storage, commands: Vec<String>) {
+    let span = span!(Level::TRACE, "store_data", commands=commands.len());
+    let _enter = span.enter();
     info!("Storing batch of {} new commands", commands.len());
     for cmd in commands {
         match storage.store(cmd.to_string()) {
             Ok(()) => {
-                info!("Stored {}", cmd);
+                info!(metric=cmd.to_string().as_str(), "Stored {}", cmd);
             }
             Err(err) => {
                 debug!("{}", err.to_string());
