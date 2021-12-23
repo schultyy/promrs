@@ -15,6 +15,7 @@ mod storage;
 mod storage_error;
 mod web_error;
 mod command;
+mod cli_opts;
 
 type WebResult<T> = std::result::Result<T, Rejection>;
 
@@ -45,12 +46,19 @@ fn init_tracer() -> Result<Tracer, TraceError> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tracer = init_tracer().expect("Failed to initialize tracer");
-    tracing_subscriber::registry()
-            .with(tracing_subscriber::EnvFilter::new("INFO"))
-            .with(tracing_opentelemetry::layer().with_tracer(tracer))
-            .try_init()
-            .expect("Failed to register tracer with registry");
+    let print_local = cli_opts::print_local();
+    if print_local {
+        std::env::set_var("RUST_LOG", "INFO");
+        tracing_subscriber::fmt::init();
+    }
+    else {
+        let tracer = init_tracer().expect("Failed to initialize tracer");
+        tracing_subscriber::registry()
+                .with(tracing_subscriber::EnvFilter::new("INFO"))
+                .with(tracing_opentelemetry::layer().with_tracer(tracer))
+                .try_init()
+                .expect("Failed to register tracer with registry");
+    }
 
     let vals: (Sender<Command>, Receiver<Command>) = broadcast::channel(500);
     let tx = vals.0;
