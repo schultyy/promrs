@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _enter = span.enter();
                 let results = scrape_metrics().await.unwrap();
                 if let Err(err) = tx.send(Command::Store(results)) {
-                    eprintln!("Encountered Error {:?}", err);
+                    error!("Encountered Error {:?}", err);
                 }
             });
         }
