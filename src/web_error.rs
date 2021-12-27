@@ -26,8 +26,7 @@ pub async fn handle_rejection(err: Rejection) -> std::result::Result<impl Reply,
     } else if let Some(e) = err.find::<Error>() {
         match e {
             Error::UnprocessablyEntity => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
-            Error::InternalServerError => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            _ => (StatusCode::BAD_REQUEST, e.to_string()),
+            Error::InternalServerError => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         }
     } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
         (
