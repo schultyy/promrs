@@ -164,8 +164,8 @@ fn format_reply(metrics: Command) -> WebResult<impl Reply> {
             Ok(reply::json(&json_str))
         },
         _ => {
-            debug!("Handling unexpected command message in `format_reply`: {}", metrics);
-            Ok(reply::json(&"ok".to_string()))
+            error!("Handling unexpected command message in `format_reply`: {}", metrics);
+            Err(reject::custom(web_error::Error::InternalServerError))
         }
     }
 }
