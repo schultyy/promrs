@@ -203,7 +203,7 @@ fn store_data(storage: &mut Storage, commands: Vec<String>) {
     for cmd in commands {
         match storage.store(cmd.to_string()) {
             Ok(()) => {
-                info!(metric=cmd.to_string().as_str(), "Stored {}", cmd);
+                debug!(metric=cmd.to_string().as_str(), "Stored {}", cmd);
             }
             Err(err) => {
                 debug!("{}", err.to_string());
