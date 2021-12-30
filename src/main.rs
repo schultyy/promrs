@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _enter = span.enter();
                 let results = scrape_metrics().await.unwrap();
                 if let Err(err) = tx.send(Command::Store(results)) {
-                    eprintln!("Encountered Error {:?}", err);
+                    error!("Encountered Error {:?}", err);
                 }
             });
         }
@@ -164,8 +164,8 @@ fn format_reply(metrics: Command) -> WebResult<impl Reply> {
             Ok(reply::json(&json_str))
         },
         _ => {
-            debug!("Handling unexpected command message in `format_reply`: {}", metrics);
-            Ok(reply::json(&"ok".to_string()))
+            error!("Handling unexpected command message in `format_reply`: {}", metrics);
+            Err(reject::custom(web_error::Error::InternalServerError))
         }
     }
 }
@@ -203,7 +203,7 @@ fn store_data(storage: &mut Storage, commands: Vec<String>) {
     for cmd in commands {
         match storage.store(cmd.to_string()) {
             Ok(()) => {
-                info!(metric=cmd.to_string().as_str(), "Stored {}", cmd);
+                debug!(metric=cmd.to_string().as_str(), "Stored {}", cmd);
             }
             Err(err) => {
                 debug!("{}", err.to_string());

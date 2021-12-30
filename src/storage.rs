@@ -16,11 +16,11 @@ impl Storage {
 
     pub fn store(&mut self, metric_str: String) -> Result<(), StorageError> {
         if let Some(metric) = Metric::from_str(&metric_str) {
-            if self.metrics.contains_key(&metric.name) {
-                let time_series = self.metrics.get_mut(&metric.name).unwrap();
+            if self.metrics.contains_key(metric.name()) {
+                let time_series = self.metrics.get_mut(metric.name()).unwrap();
                 time_series.push(metric.into());
             } else {
-                self.metrics.insert(metric.name.to_string(), vec![metric.into()]);
+                self.metrics.insert(metric.name().to_string(), vec![metric.into()]);
             }
             Ok(())
         }
