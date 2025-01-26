@@ -13,10 +13,11 @@ warp = "0.3"
 thiserror = "1.0"
 serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tracing = "0.1"
+tracing = { version = "0.1", features = ["log", "log-always"] }
 tracing-subscriber = {version = "0.3.3", features = ["std", "env-filter"]}
 tracing-opentelemetry = "0.28.0"
 opentelemetry = "0.27"
 opentelemetry-otlp = "0.27.0"
 clap= { version = "4.5", features = ["derive"] }
-opentelemetry_sdk = "0.27.1"
+opentelemetry_sdk = { version = "0.27.1", features = ["opentelemetry-http", "rt-tokio"] }
+tonic = "0.12.3"

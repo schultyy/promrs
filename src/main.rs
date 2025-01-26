@@ -1,19 +1,28 @@
 use std::{collections::HashMap, sync::Arc};
 
+use clap::Parser;
 use command::Command;
-use opentelemetry::trace::{TraceError, Tracer, TracerProvider as _};
-use opentelemetry_sdk::trace::TracerProvider;
+use opentelemetry::{
+    trace::{TraceError, Tracer, TracerProvider as _},
+    KeyValue,
+};
+use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
+use opentelemetry_sdk::{
+    self,
+    trace::{self, RandomIdGenerator, Sampler, TracerProvider},
+    Resource,
+};
 use storage::Storage;
 use tokio::{
     sync::broadcast::{self, Receiver, Sender},
     task,
 };
+use tonic::metadata::{MetadataMap, MetadataValue};
 use tracing::{debug, error, info, instrument, span, Level};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{layer::SubscriberExt, Registry};
 use warp::{reject, reply, Filter, Rejection, Reply};
 
-mod cli_opts;
 mod command;
 mod metrics;
 mod storage;
@@ -43,31 +52,69 @@ async fn scrape_metrics() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(metrics)
 }
 
-fn init_tracer() -> Result<TracerProvider, TraceError> {
+fn init_tracer(endpoint: &str) -> Result<TracerProvider, TraceError> {
+    let mut map = MetadataMap::with_capacity(3);
+
+    map.insert("x-host", "example.com".parse().unwrap());
+    map.insert("x-number", "123".parse().unwrap());
+    map.insert_bin(
+        "trace-proto-bin",
+        MetadataValue::from_bytes(b"[binary data]"),
+    );
+
     let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
+        .with_endpoint(endpoint)
+        .with_metadata(map)
         .build()?;
+
     // Then pass it into provider builder
     let provider = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_simple_exporter(otlp_exporter)
+        .with_batch_exporter(otlp_exporter, opentelemetry_sdk::runtime::Tokio)
+        .with_config(
+            trace::Config::default()
+                .with_sampler(Sampler::AlwaysOn)
+                .with_id_generator(RandomIdGenerator::default())
+                .with_max_events_per_span(64)
+                .with_max_attributes_per_span(16)
+                .with_max_events_per_span(16)
+                .with_resource(Resource::new(vec![KeyValue::new(
+                    "service.name",
+                    "prom_rs",
+                )])),
+        )
         .build();
     Ok(provider)
-    // opentelemetry_jaeger::new_pipeline()
-    //     .with_service_name("promrs")
-    //     .install_simple()
+}
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Prints traces to local stdout instead of jaeger
+    #[arg(short, long)]
+    local: bool,
+    /// Otel endpoint
+    #[arg(short, long, default_value_t = String::from("http://localhost:4317"))]
+    otel_endpoint: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let print_local = cli_opts::print_local();
-    if print_local {
+    let args = Args::parse();
+    if args.local {
         std::env::set_var("RUST_LOG", "INFO");
         tracing_subscriber::fmt::init();
     } else {
-        let provider = init_tracer().expect("Failed to initialize tracer");
+        let provider = init_tracer(&args.otel_endpoint).expect("Failed to initialize tracer");
         let tracer = provider.tracer("readme_example");
         let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-        let _ = Registry::default().with(telemetry);
+        let subscriber = Registry::default().with(telemetry);
+        tracing::subscriber::with_default(subscriber, || {
+            // Spans will be sent to the configured OpenTelemetry exporter
+            let root = span!(tracing::Level::TRACE, "app_start", work_units = 2);
+            let _enter = root.enter();
+
+            error!("This event will be logged in the root span.");
+        });
     }
 
     let vals: (Sender<Command>, Receiver<Command>) = broadcast::channel(500);
