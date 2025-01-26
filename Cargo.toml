@@ -15,7 +15,8 @@ serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
 tracing-subscriber = {version = "0.3.3", features = ["std", "env-filter"]}
-tracing-opentelemetry = "0.16.0"
-opentelemetry-jaeger = "0.15.0"
-opentelemetry = "0.16"
+tracing-opentelemetry = "0.28.0"
+opentelemetry = "0.27"
+opentelemetry-otlp = "0.27.0"
 clap="2.34"
+opentelemetry_sdk = "0.27.1"
