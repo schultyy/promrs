@@ -1,14 +1,14 @@
-use clap::{Arg, App};
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Prints traces to local stdout instead of jaeger
+    #[arg(short, long)]
+    local: bool,
+}
 
 pub fn print_local() -> bool {
-    let matches = App::new("promrs")
-    .version("0.1")
-    .author("Jan Schulte. <janschulte@fastmail.com>")
-    .arg(Arg::with_name("local")
-         .short("l")
-         .long("local")
-         .help("Prints traces to local stdout instead of jaeger"))
-    .get_matches();
-
-    matches.occurrences_of("local") > 0
+    let args = Args::parse();
+    args.local
 }
