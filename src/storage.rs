@@ -16,7 +16,7 @@ impl Storage {
         }
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn store(&mut self, metric_str: String) -> Result<(), StorageError> {
         if let Some(metric) = Metric::from_str(&metric_str) {
             if self.metrics.contains_key(&metric.name) {
