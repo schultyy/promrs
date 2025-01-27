@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
 use clap::Parser;
 use command::Command;
@@ -57,7 +57,7 @@ async fn scrape_metrics() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(metrics)
 }
 
-fn init_tracer(endpoint: &str) -> Result<TracerProvider, TraceError> {
+fn init_tracer(endpoint: &str) -> Result<LoggerProvider, Box<dyn Error>> {
     let mut map = MetadataMap::with_capacity(3);
 
     map.insert("x-host", "example.com".parse().unwrap());
@@ -89,28 +89,11 @@ fn init_tracer(endpoint: &str) -> Result<TracerProvider, TraceError> {
                 )])),
         )
         .build();
-    Ok(provider)
-}
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    /// Prints traces to local stdout instead of jaeger
-    #[arg(short, long)]
-    local: bool,
-    /// Otel endpoint
-    #[arg(short, long, default_value_t = String::from("http://localhost:4317"))]
-    otel_endpoint: String,
-}
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
-    std::env::set_var("RUST_LOG", "INFO");
-    let provider = init_tracer(&args.otel_endpoint).expect("Failed to initialize tracer");
     let tracer = provider.tracer("readme_example");
     let exporter = LogExporter::builder()
         .with_tonic()
-        .with_endpoint(&args.otel_endpoint)
+        .with_endpoint(endpoint)
         .with_metadata(MetadataMap::new())
         .build()?;
     let logger_provider = LoggerProvider::builder()
@@ -126,6 +109,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(layer)
         .with(OpenTelemetryLayer::new(tracer))
         .init();
+    Ok(logger_provider)
+}
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Prints traces to local stdout instead of jaeger
+    #[arg(short, long)]
+    local: bool,
+    /// Otel endpoint
+    #[arg(short, long, default_value_t = String::from("http://localhost:4317"))]
+    otel_endpoint: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+    let logger_provider = init_tracer(&args.otel_endpoint).unwrap();
 
     let vals: (Sender<Command>, Receiver<Command>) = broadcast::channel(500);
     let tx = vals.0;
