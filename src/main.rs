@@ -6,9 +6,13 @@ use opentelemetry::{
     trace::{TraceError, Tracer, TracerProvider as _},
     KeyValue,
 };
-use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
+
+use opentelemetry_appender_tracing::layer;
+use opentelemetry_otlp::{LogExporter, WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::{
     self,
+    logs::{BatchConfig, BatchLogProcessor, LoggerProvider},
+    runtime,
     trace::{self, RandomIdGenerator, Sampler, TracerProvider},
     Resource,
 };
@@ -19,6 +23,7 @@ use tokio::{
 };
 use tonic::metadata::{MetadataMap, MetadataValue};
 use tracing::{debug, error, info, instrument, span, Level};
+use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{layer::SubscriberExt, Registry};
 use warp::{reject, reply, Filter, Rejection, Reply};
@@ -73,7 +78,7 @@ fn init_tracer(endpoint: &str) -> Result<TracerProvider, TraceError> {
         .with_batch_exporter(otlp_exporter, opentelemetry_sdk::runtime::Tokio)
         .with_config(
             trace::Config::default()
-                .with_sampler(Sampler::AlwaysOn)
+                // .with_sampler(Sampler::AlwaysOn)
                 .with_id_generator(RandomIdGenerator::default())
                 .with_max_events_per_span(64)
                 .with_max_attributes_per_span(16)
@@ -100,22 +105,27 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    if args.local {
-        std::env::set_var("RUST_LOG", "INFO");
-        tracing_subscriber::fmt::init();
-    } else {
-        let provider = init_tracer(&args.otel_endpoint).expect("Failed to initialize tracer");
-        let tracer = provider.tracer("readme_example");
-        let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-        let subscriber = Registry::default().with(telemetry);
-        tracing::subscriber::with_default(subscriber, || {
-            // Spans will be sent to the configured OpenTelemetry exporter
-            let root = span!(tracing::Level::TRACE, "app_start", work_units = 2);
-            let _enter = root.enter();
+    std::env::set_var("RUST_LOG", "INFO");
+    let provider = init_tracer(&args.otel_endpoint).expect("Failed to initialize tracer");
+    let tracer = provider.tracer("readme_example");
+    let exporter = LogExporter::builder()
+        .with_tonic()
+        .with_endpoint(&args.otel_endpoint)
+        .with_metadata(MetadataMap::new())
+        .build()?;
+    let logger_provider = LoggerProvider::builder()
+        .with_batch_exporter(exporter, runtime::Tokio)
+        .build();
+    let layer = layer::OpenTelemetryTracingBridge::new(&logger_provider);
 
-            error!("This event will be logged in the root span.");
-        });
-    }
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::filter::LevelFilter::from_level(
+            Level::INFO,
+        ))
+        .with(tracing_subscriber::fmt::layer())
+        .with(layer)
+        .with(OpenTelemetryLayer::new(tracer))
+        .init();
 
     let vals: (Sender<Command>, Receiver<Command>) = broadcast::channel(500);
     let tx = vals.0;
@@ -129,7 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         while let Ok(cmd) = rx1.recv().await {
             let span = span!(Level::TRACE, "manager_received_command");
             let _enter = span.enter();
-            info!("received command {}", cmd.to_string());
+            info!(cmd = cmd.to_string().as_str(), "Received Command");
             process_received_manager_command(cmd, &mut storage, &backchannel);
         }
     });
@@ -147,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _enter = span.enter();
                 let results = scrape_metrics().await.unwrap();
                 if let Err(err) = tx.send(Command::Store(results)) {
-                    eprintln!("Encountered Error {:?}", err);
+                    error!("Encountered Error {:?}", err);
                 }
             });
         }
@@ -173,6 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     forever_http_interface.await.unwrap();
 
     opentelemetry::global::shutdown_tracer_provider();
+    logger_provider.shutdown()?;
     Ok(())
 }
 

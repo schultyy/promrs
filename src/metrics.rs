@@ -1,13 +1,15 @@
 use chrono::prelude::*;
+use tracing::instrument;
 
 #[derive(Debug, Clone)]
 pub struct Metric {
     pub name: String,
     pub value: f64,
-    pub timestamp: i64
+    pub timestamp: i64,
 }
 
 impl Metric {
+    #[instrument]
     pub fn from_str(metric_str: &str) -> Option<Metric> {
         if metric_str.contains("{") || metric_str.contains("}") {
             return None;
@@ -31,7 +33,7 @@ impl Metric {
         Some(Metric {
             name: metric_name.unwrap().to_string(),
             value: parsed_metric_value.unwrap(),
-            timestamp: utc.timestamp()
+            timestamp: utc.timestamp(),
         })
     }
 }
